@@ -329,7 +329,8 @@
       <span class="hud-ax hud-ax-x">X</span>
       <span class="hud-ax hud-ax-y">Y</span>
       <span class="hud-ax hud-ax-z">Z</span>
-      <span class="hud-coord" id="hudCoords">ROT Y: 0°  ·  CAPA: 0  ·  Z: 0.00</span>
+      <span class="hud-coord" id="hudCoords">ROT Y: 0°  ·  CAPES: 0  ·  Z: 0.00</span>
+      <span id="rotMode" style="font-size:9px;padding:2px 7px;border-radius:3px;font-weight:800;letter-spacing:.08em;background:#00d4ff22;color:#00d4ff;border:1px solid #00d4ff44">MODEL</span>
       <span class="hud-fps" id="hudFps">—</span>
     </div>
   </div>
@@ -374,24 +375,38 @@ camera.position.set(6.5, 3.5, 7.5);
 camera.lookAt(0, 1.0, 0);
 
 // Lights
-scene.add(new THREE.AmbientLight(0xaabbcc, 2.0));
-const keyLight = new THREE.DirectionalLight(0xffffff, 5);
-keyLight.position.set(5, 10, 5); keyLight.castShadow = true; scene.add(keyLight);
-const fillLight = new THREE.DirectionalLight(0xa020f0, 2.0);
-fillLight.position.set(-5, 3, -5); scene.add(fillLight);
-const rimLight = new THREE.DirectionalLight(0x00d4ff, 3.0);
-rimLight.position.set(0, -3, -6); scene.add(rimLight);
-const pointLight = new THREE.PointLight(0x00d4ff, 3, 22);
+// PBR lighting rig — same approach as slicer.html
+scene.add(new THREE.HemisphereLight(0xc0d8f0, 0x181c22, 1.2));
+const keyLight = new THREE.DirectionalLight(0xfff5e8, 4.5);
+keyLight.position.set(4, 9, 6); keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(2048, 2048);
+keyLight.shadow.camera.near = 0.5; keyLight.shadow.camera.far = 60;
+keyLight.shadow.camera.left = keyLight.shadow.camera.bottom = -8;
+keyLight.shadow.camera.right = keyLight.shadow.camera.top  =  8;
+keyLight.shadow.bias = -0.0005;
+scene.add(keyLight);
+const fillLight = new THREE.DirectionalLight(0x8899cc, 0.9);
+fillLight.position.set(-5, 3, -4); scene.add(fillLight);
+const rimLight = new THREE.DirectionalLight(0x4466aa, 0.7);
+rimLight.position.set(0, -2, -6); scene.add(rimLight);
+const pointLight = new THREE.PointLight(0x00d4ff, 1.2, 20);
 pointLight.position.set(0, 4, 0); scene.add(pointLight);
 
-// Bed — wider, bluer grid to match reference
+// Bed — smaller plate, MeshStandard like slicer
 const bed = new THREE.Mesh(
-  new THREE.BoxGeometry(10, 0.04, 10),
-  new THREE.MeshPhongMaterial({ color: 0x07101e, shininess: 20, transparent: true, opacity: 0.5 })
+  new THREE.BoxGeometry(6, 0.04, 6),
+  new THREE.MeshStandardMaterial({ color: 0x1c2230, roughness: 0.9, metalness: 0.1, transparent: true, opacity: 0.85 })
 );
 bed.position.y = -0.02; bed.receiveShadow = true; scene.add(bed);
-const grid = new THREE.GridHelper(10, 50, 0x1a4a70, 0x0d2235);
-grid.position.y = 0.02; scene.add(grid);
+const grid  = new THREE.GridHelper(6, 60, 0x232c3a, 0x1a2230);
+const grid2 = new THREE.GridHelper(6, 12, 0x2e3f52, 0x2e3f52);
+grid.position.y = grid2.position.y = 0.001; scene.add(grid); scene.add(grid2);
+// Bed border
+const bedBorder = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(6, 0.001, 6)),
+  new THREE.LineBasicMaterial({ color: 0x2a5070, transparent: true, opacity: 0.9 })
+);
+bedBorder.position.y = 0.003; scene.add(bedBorder);
 
 // Model group
 const modelGroup = new THREE.Group(); scene.add(modelGroup);
@@ -414,23 +429,45 @@ pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
 const pMat   = new THREE.PointsMaterial({ color: 0x00d4ff, size: 0.035, transparent: true, opacity: .6 });
 const pCloud = new THREE.Points(pGeo, pMat); pCloud.visible = false; scene.add(pCloud);
 
-// ── Solid cyan/teal material (like reference) ──
-const solidMat = new THREE.MeshPhongMaterial({
-  color:     0x00c8dc,
-  emissive:  0x005566,
-  shininess: 18,
-  specular:  0x112233,
-});
-const wireMat = new THREE.MeshBasicMaterial({
-  color: 0x00d4ff, wireframe: true, transparent: true, opacity: 0.07 });
-
-// No clipping planes — model always fully solid like reference
+// ── PBR cyan material — MeshStandard for proper light/shadow contrast ──
+const solidMat  = new THREE.MeshStandardMaterial({ color: 0x00b8cc, roughness: 0.52, metalness: 0.06 });
+const wireMat   = new THREE.MeshBasicMaterial({ color: 0x5599ff, wireframe: true, transparent: true, opacity: 0.10 });
+const outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide, transparent: true, opacity: 0.30 });
 
 // State
 let modelLoaded = false, modelMinY = 0, modelMaxY = 2;
 let printPct = 0, totalLayers = 200, startTime = null, isPaused = false;
 let autoRotAngle = 0, userRotX = 0, userRotY = 0;
 let isDragging = false, lastMX = 0, lastMY = 0;
+
+// ── Orbit mode ──
+let orbitMode = false;
+let camTheta = 0.55, camPhi = 1.1, camDist = 9.0;
+const camTarget = new THREE.Vector3(0, 1.5, 0);
+
+function updateCameraOrbit() {
+  camera.position.set(
+    camTarget.x + camDist * Math.sin(camPhi) * Math.sin(camTheta),
+    camTarget.y + camDist * Math.cos(camPhi),
+    camTarget.z + camDist * Math.sin(camPhi) * Math.cos(camTheta)
+  );
+  camera.lookAt(camTarget);
+}
+
+function setOrbitMode(enabled) {
+  orbitMode = enabled;
+  const el = document.getElementById('rotMode');
+  if (orbitMode) {
+    userRotX = 0; userRotY = 0; autoRotAngle = 0;
+    modelGroup.rotation.set(0, 0, 0);
+    modelGroup.position.y = 0;
+    el.textContent = 'ORBIT';
+    el.style.background = '#a020f022'; el.style.color = '#c060ff'; el.style.borderColor = '#a020f044';
+  } else {
+    el.textContent = 'MODEL';
+    el.style.background = '#00d4ff22'; el.style.color = '#00d4ff'; el.style.borderColor = '#00d4ff44';
+  }
+}
 
 // Resize
 function onResize() {
@@ -453,10 +490,15 @@ function animate() {
   }
 
   if (modelGroup.children.length) {
-    if (!isDragging) autoRotAngle += 0.0025; // slower, more cinematic
-    modelGroup.rotation.x = userRotX;
-    modelGroup.rotation.y = userRotY + autoRotAngle;
-    modelGroup.position.y = Math.sin(userRotY + autoRotAngle) * 0.025;
+    if (orbitMode) {
+      if (!isDragging) camTheta += 0.0025;
+      updateCameraOrbit();
+    } else {
+      if (!isDragging) autoRotAngle += 0.0025;
+      modelGroup.rotation.x = userRotX;
+      modelGroup.rotation.y = userRotY + autoRotAngle;
+      modelGroup.position.y = Math.sin(userRotY + autoRotAngle) * 0.025;
+    }
   }
 
   if (modelLoaded) {
@@ -464,7 +506,7 @@ function animate() {
     document.getElementById('hudCoords').textContent = `ROT Y: ${rx}°  ·  CAPES: ${totalLayers}  ·  Z: ${modelMaxY.toFixed(2)}`;
   }
 
-  pointLight.intensity = 3 + Math.sin(t*2.5)*0.8;
+  pointLight.intensity = 1.2 + Math.sin(t*2.5)*0.3;
   renderer.render(scene, camera);
 }
 animate();
@@ -498,7 +540,7 @@ function parseSTL(buf) {
 }
 
 // ── Load geometry ─────────────────────────────────────
-const MODEL_SCALE = 4.2; // 40% bigger than default 3.0
+const MODEL_SCALE = 5.0; // larger model, smaller plate = gun fills frame
 
 function loadGeometry(geo, filename) {
   geo.computeBoundingBox();
@@ -517,15 +559,21 @@ function loadGeometry(geo, filename) {
     modelGroup.children[0].geometry?.dispose();
     modelGroup.remove(modelGroup.children[0]);
   }
-  const mesh = new THREE.Mesh(geo, solidMat); mesh.castShadow = true; modelGroup.add(mesh);
+  const mesh = new THREE.Mesh(geo, solidMat);
+  mesh.castShadow = true; mesh.receiveShadow = true; modelGroup.add(mesh);
+  const outMesh = new THREE.Mesh(geo, outlineMat);
+  outMesh.scale.setScalar(1.018); modelGroup.add(outMesh);
   modelGroup.add(new THREE.Mesh(geo, wireMat));
 
   const mh = fb.max.y - fb.min.y;
   modelMinY = fb.min.y; modelMaxY = fb.max.y;
 
   // Camera positioned for the bigger model
+  camTarget.set(0, mh * 0.5, 0);
+  camDist = MODEL_SCALE * 2.4;
+  camTheta = 0.55; camPhi = 1.1;
   camera.position.set(MODEL_SCALE*1.5, mh*0.5 + MODEL_SCALE*0.85, MODEL_SCALE*1.8);
-  camera.lookAt(0, mh*0.5, 0);
+  camera.lookAt(camTarget);
 
   totalLayers = Math.max(50, Math.round(mh/0.012));
   printPct = 0; startTime = Date.now(); modelLoaded = true;
@@ -630,25 +678,42 @@ ck(); setInterval(ck,1000);
 // ── Mouse / touch interaction ─────────────────────────
 canvas.addEventListener('mousedown', e=>{ isDragging=true; lastMX=e.clientX; lastMY=e.clientY; canvas.classList.add('grabbing'); });
 window.addEventListener('mousemove', e=>{
-  if(!isDragging) return;
-  userRotY += (e.clientX-lastMX)*0.006; userRotX += (e.clientY-lastMY)*0.004;
-  userRotX = Math.max(-1.2,Math.min(1.2,userRotX));
-  lastMX=e.clientX; lastMY=e.clientY;
+  if (!isDragging) return;
+  const dx = e.clientX - lastMX, dy = e.clientY - lastMY;
+  if (orbitMode) {
+    camTheta -= dx * 0.006;
+    camPhi = Math.max(0.08, Math.min(Math.PI - 0.08, camPhi - dy * 0.004));
+  } else {
+    userRotY += dx * 0.006;
+    userRotX += dy * 0.004;
+    userRotX = Math.max(-1.2, Math.min(1.2, userRotX));
+  }
+  lastMX = e.clientX; lastMY = e.clientY;
 });
-window.addEventListener('mouseup',()=>{ isDragging=false; canvas.classList.remove('grabbing'); });
+window.addEventListener('mouseup', ()=>{ isDragging=false; canvas.classList.remove('grabbing'); });
 
-// Zoom
+// Zoom — camDist in orbit, camera.zoom in model mode
 let camZoom = 1.0;
-function applyZoom(){ camera.zoom=camZoom; camera.updateProjectionMatrix(); }
+function applyZoom() { camera.zoom = camZoom; camera.updateProjectionMatrix(); }
+function doZoom(inward) {
+  if (orbitMode) {
+    camDist = Math.min(30, Math.max(2, camDist * (inward ? 1/1.1 : 1.1)));
+  } else {
+    camZoom = Math.min(5, Math.max(0.2, camZoom * (inward ? 1.1 : 1/1.1)));
+    applyZoom();
+  }
+}
 canvas.addEventListener('wheel', e=>{
   e.preventDefault();
-  camZoom = Math.min(5, Math.max(0.2, camZoom*(e.deltaY<0?1.08:1/1.08)));
-  applyZoom();
-},{ passive:false });
+  doZoom(e.deltaY < 0);
+}, { passive: false });
+
 document.addEventListener('keydown', e=>{
-  if (e.key==='+'||e.key==='='){ camZoom=Math.min(5,camZoom*1.1); applyZoom(); }
-  if (e.key==='-'||e.key==='_'){ camZoom=Math.max(0.2,camZoom/1.1); applyZoom(); }
-  if (e.key==='0'){ camZoom=1; applyZoom(); }
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key==='+'||e.key==='='||e.key==='ArrowUp')   doZoom(true);
+  if (e.key==='-'||e.key==='_'||e.key==='ArrowDown') doZoom(false);
+  if (e.key==='0') { camZoom=1; applyZoom(); camDist=MODEL_SCALE*2.4; }
+  if (e.key==='o'||e.key==='O') setOrbitMode(!orbitMode);
 });
 
 // ── Auto-preload frame.stl ────────────────────────────

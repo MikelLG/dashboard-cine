@@ -840,7 +840,7 @@ const layerMat = new THREE.ShaderMaterial({
 let models = [];       // { group, name, tris, dimX, dimY, dimZ, minY, maxY, solidMat }
 let selIdx  = -1;      // selected model index
 let modelMinY = 0, modelMaxY = 2, totalLayers = 200;
-let camTheta = 0.8, camPhi = 1.05, camDist = 5; // spherical orbit coords
+let camTheta = 0.8, camPhi = 0.75, camDist = 5; // spherical orbit coords
 let isDragging = false, lastMX = 0, lastMY = 0;
 let userInteracted = false;
 let viewMode = 'solid', appMode = 'prepare';
@@ -1610,6 +1610,9 @@ document.getElementById('procHdr').addEventListener('click', () => {
 // Clock
 const tick = () => document.getElementById('menuClock').textContent = new Date().toLocaleTimeString('en-GB', {hour12:false});
 tick(); setInterval(tick, 1000);
+
+// Auto-load sample on start
+loadSample();
 </script>
 <div id="toast" class="toast"></div>
 </body>

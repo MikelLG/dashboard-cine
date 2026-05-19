@@ -1578,9 +1578,9 @@ function loadSample() {
   // Try to fetch the local STL first; fall back to a procedural shape so it
   // always works even when opened via file:// (where fetch is blocked by CORS).
   show_loading('Loading sample model…');
-  fetch('p320_xcompact_airsoft_final_2.stl')
+  fetch('STL/main/frame.stl')
     .then(r => { if (!r.ok) throw new Error(); return r.arrayBuffer(); })
-    .then(buf => { loadGeo(parseSTL(buf), 'p320_xcompact_airsoft_final_2.stl'); hide_loading(); })
+    .then(buf => { loadGeo(parseSTL(buf), 'frame.stl'); hide_loading(); })
     .catch(() => {
       // Fallback: generate a torus-knot procedurally (no network needed)
       try {

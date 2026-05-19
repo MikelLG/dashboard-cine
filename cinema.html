@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dashboard Impressió 3D — Cinema</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:     #050709;
+      --border: #1a2230;
+      --accent: #00d4ff;
+      --purple: #a020f0;
+      --green:  #57ff2a;
+      --amber:  #f59e0b;
+      --text:   #dde8f0;
+      --muted:  #445060;
+    }
+    html, body {
+      height: 100%; width: 100%;
+      background: var(--bg); color: var(--text);
+      font-family: 'Courier New', 'Consolas', monospace;
+      overflow: hidden;
+    }
+    .shell {
+      display: grid;
+      grid-template-rows: 48px 1fr 48px;
+      height: 100vh; width: 100vw;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px; background: #0a0d15cc;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px); gap: 16px; z-index: 20;
+    }
+    .header-left  { display: flex; align-items: center; gap: 12px; flex: 1; }
+    .header-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .logo { display: flex; align-items: center; gap: 8px;
+      font-weight: 800; font-size: 13px; letter-spacing: .05em; }
+    .logo-dot { width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent); box-shadow: 0 0 8px var(--accent);
+      animation: blink 2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .filename { font-size: 12px; font-weight: 600; }
+    .badge { padding: 2px 9px; border-radius: 2px; font-size: 10px; font-weight: 700;
+      letter-spacing: .06em; font-family: 'Courier New', monospace; }
+    .badge-green { background:#10b98118; color:var(--green); border:1px solid #10b98135; }
+    .badge-amber { background:#f59e0b18; color:var(--amber); border:1px solid #f59e0b35; }
+    #clock { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .btn { padding: 5px 13px; border-radius: 2px; font-size: 11px; font-weight: 700;
+      letter-spacing: .08em; cursor: pointer; border: none; transition: opacity .15s;
+      font-family: 'Courier New', monospace; text-transform: uppercase; }
+    .btn:hover { opacity: .75; }
+    .btn-accent { background: var(--accent); color: #000; }
+    .btn-ghost  { background: #ffffff10; color: var(--text); border: 1px solid var(--border); }
+
+    /* ── Viewport ── */
+    .viewport { position: relative; background: #030507; overflow: hidden; }
+    #threeCanvas { display: block; width: 100%; height: 100%; cursor: grab; }
+    #threeCanvas.grabbing { cursor: grabbing; }
+
+    .scanlines {
+      position: absolute; inset: 0; pointer-events: none; z-index: 2;
+      background: repeating-linear-gradient(
+        0deg, transparent, transparent 3px, #00000014 3px, #00000014 4px);
+    }
+    .vignette {
+      position: absolute; inset: 0; pointer-events: none; z-index: 3;
+      background: radial-gradient(ellipse at center, transparent 50%, #00000099 100%);
+    }
+    .sweep-hud {
+      position: absolute; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent 5%, var(--accent) 30%, var(--accent) 70%, transparent 95%);
+      pointer-events: none; z-index: 5; opacity: .45;
+      box-shadow: 0 0 6px var(--accent);
+    }
+
+    /* ── HUD panels ── */
+    .hud-panel {
+      position: absolute; z-index: 10;
+      background: #04080de0; border: 1px solid #2a4060;
+      border-radius: 3px; padding: 14px 16px;
+      backdrop-filter: blur(12px); pointer-events: none;
+      display: flex; flex-direction: column; gap: 12px;
+      box-shadow: 0 0 0 1px #00d4ff06, 0 4px 24px #00000070;
+    }
+    .hud-panel-title {
+      font-size: 9px; font-weight: 800; letter-spacing: .18em;
+      text-transform: uppercase; color: var(--muted);
+      border-bottom: 1px solid #1c233360; padding-bottom: 6px;
+    }
+    .hud-tl { top: 16px; left: 18px; width: 240px; }
+    .hud-tr { top: 16px; right: 18px; width: 220px; }
+    .hud-bl { bottom: 16px; left: 18px; width: 260px; }
+    .hud-br { bottom: 16px; right: 18px; width: 245px; }
+
+    .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-mini { display: flex; flex-direction: column; gap: 3px;
+      background: #ffffff06; border-radius: 6px; padding: 7px 9px; }
+    .stat-mini-label { font-size: 9px; color: var(--muted); letter-spacing: .06em; font-weight: 700; }
+    .stat-mini-val   { font-size: 24px; font-weight: 900; line-height: 1; }
+    .c-accent { color: var(--accent);  text-shadow: 0 0 14px #00d4ff50; }
+    .c-green  { color: var(--green);   text-shadow: 0 0 14px #10b98150; }
+    .c-amber  { color: var(--amber);   text-shadow: 0 0 14px #f59e0b50; }
+    .c-purple { color: var(--purple);  text-shadow: 0 0 14px #7c3aed50; }
+
+    .ring-row { display: flex; align-items: center; gap: 16px; }
+    .ring-pct { font-size: 38px; font-weight: 900; color: var(--accent); line-height: 1;
+      text-shadow: 0 0 20px #00d4ff60; }
+    .ring-sub { font-size: 11px; color: var(--muted); font-weight: 600; }
+    .pbar { height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .pbar-fill { height: 100%; border-radius: 99px;
+      background: linear-gradient(90deg, var(--purple), var(--accent));
+      transition: width .8s ease; box-shadow: 0 0 8px #00d4ff80; }
+
+    .temp-svg { width: 100%; height: 68px; }
+
+    .layer-list { display: flex; flex-direction: column; gap: 3px; }
+    .layer-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 5px 8px; border-radius: 5px; font-size: 12px; color: var(--muted);
+      background: #ffffff05;
+    }
+    .layer-row.active {
+      background: #00d4ff15; color: var(--accent); font-weight: 800;
+      box-shadow: inset 0 0 0 1px #00d4ff30;
+    }
+    .layer-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+    .layer-row.active .layer-dot { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+    .mat-list { display: flex; flex-direction: column; gap: 10px; }
+    .mat-row  { display: flex; flex-direction: column; gap: 5px; }
+    .mat-hdr  { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; }
+    .mat-hdr span:last-child { color: var(--accent); font-size: 14px; font-weight: 900; }
+    .mat-bg   { height: 7px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .mat-fill { height: 100%; border-radius: 99px; }
+
+    .spec-list { display: flex; flex-direction: column; gap: 6px; }
+    .spec-row  { display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 11px; padding-bottom: 6px; border-bottom: 1px solid #1c233350; }
+    .spec-row:last-child { border: none; padding-bottom: 0; }
+    .spec-key { color: var(--muted); }
+    .spec-val { font-weight: 700; font-size: 12px; text-align: right;
+      max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Code panel — right side, stationary ── */
+    .code-panel {
+      position: absolute; z-index: 10;
+      right: 265px; top: 50%; transform: translateY(-50%);
+      width: 210px; pointer-events: none;
+      font-family: 'Courier New', monospace;
+      font-size: 9.5px; line-height: 1.68;
+    }
+    .code-panel span { display: block; white-space: nowrap; }
+    .code-panel .g   { color: #57ff2a; text-shadow: 0 0 5px #57ff2a33; opacity: .55; }
+    .code-panel .dim { color: #57ff2a; opacity: .22; }
+    .code-panel .c   { color: #00d4ff; text-shadow: 0 0 5px #00d4ff33; opacity: .55; }
+    .code-panel .p   { color: #a020f0; text-shadow: 0 0 5px #a020f033; opacity: .55; }
+    .code-panel .w   { color: #f59e0b; text-shadow: 0 0 5px #f59e0b33; opacity: .55; }
+    @keyframes cur { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+    .code-cursor { display: inline-block; animation: cur 0.9s infinite; }
+
+    /* ── Centre coords ── */
+    .hud-centre {
+      position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+      z-index: 10; display: flex; gap: 10px; align-items: center; pointer-events: none;
+      background: #060b14b0; border: 1px solid #1c233360;
+      border-radius: 6px; padding: 5px 14px;
+    }
+    .hud-ax { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 800; }
+    .hud-ax-x { background:#ef444422; color:#ef4444; }
+    .hud-ax-y { background:#10b98122; color:#10b981; }
+    .hud-ax-z { background:#3b82f622; color:#3b82f6; }
+    .hud-coord { font-size: 10px; color: #ffffff40; letter-spacing: .03em; }
+    .hud-fps   { font-size: 10px; color: #ffffff25; }
+
+    /* ── Footer ── */
+    footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px; background: #0a0d15cc; border-top: 1px solid var(--border);
+      backdrop-filter: blur(8px); gap: 16px; z-index: 20;
+    }
+    .footer-prog { display:flex; align-items:center; gap:10px; flex-shrink:0;
+      min-width:220px; border-right:1px solid var(--border); padding-right:16px; margin-right:4px; }
+    .footer-prog-pct { font-size:24px; font-weight:900; color:var(--accent);
+      min-width:52px; font-variant-numeric:tabular-nums; text-shadow:0 0 16px #00d4ff60; }
+    .footer-prog-bar-wrap { flex:1; height:6px; background:var(--border); border-radius:99px; overflow:hidden; min-width:80px; }
+    .footer-prog-bar { height:100%; border-radius:99px;
+      background:linear-gradient(90deg, var(--purple), var(--accent));
+      transition:width .8s ease; box-shadow:0 0 8px #00d4ff70; }
+    .footer-prog-meta { display:flex; flex-direction:column; gap:2px;
+      font-size:11px; color:var(--muted); white-space:nowrap; }
+    .timeline { display:flex; align-items:center; flex:1; }
+    .tl-step  { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; position:relative; }
+    .tl-step::before { content:''; position:absolute; top:7px; left:-50%; width:100%; height:1px; background:var(--border); z-index:0; }
+    .tl-step:first-child::before { display:none; }
+    .tl-step.done::before { background: var(--accent); }
+    .tl-dot { width:14px; height:14px; border-radius:50%; border:2px solid var(--border); background:var(--bg); z-index:1; display:flex; align-items:center; justify-content:center; }
+    .tl-step.done .tl-dot   { border-color:var(--accent); background:var(--accent); }
+    .tl-step.active .tl-dot { border-color:var(--accent); box-shadow:0 0 8px var(--accent); }
+    .tl-step.active .tl-dot::after { content:''; width:5px; height:5px; border-radius:50%; background:var(--accent); }
+    .tl-label { font-size: 9px; color: var(--muted); }
+    .tl-step.done .tl-label   { color: var(--text); }
+    .tl-step.active .tl-label { color: var(--accent); font-weight: 700; }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <header>
+    <div class="header-left">
+      <div class="logo"><div class="logo-dot"></div>3D PRINT</div>
+      <div class="filename" id="filenameLabel">frame.stl</div>
+      <span class="badge badge-green">EN LÍNIA</span>
+      <span class="badge badge-amber">IMPRIMINT</span>
+    </div>
+    <div class="header-right">
+      <span id="clock">--:--:--</span>
+      <button class="btn btn-ghost">↑ Carregar STL</button>
+      <button class="btn btn-accent">Exportar</button>
+    </div>
+  </header>
+
+  <div class="viewport" id="viewport">
+    <canvas id="threeCanvas"></canvas>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div class="sweep-hud" id="sweepHud" style="display:none"></div>
+
+    <!-- Code panel: right side, stationary -->
+    <div class="code-panel" id="codePanel"></div>
+
+    <!-- Top-left: Parameters -->
+    <div class="hud-panel hud-tl">
+      <div class="hud-panel-title">Paràmetres</div>
+      <div class="stats-row">
+        <div class="stat-mini">
+          <div class="stat-mini-label">BROQUETA</div>
+          <div class="stat-mini-val c-amber">220°C</div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-label">BASE</div>
+          <div class="stat-mini-val c-purple">60°C</div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-label">VELOCITAT</div>
+          <div class="stat-mini-val c-green">60 mm/s</div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-label">RESOLUCIÓ</div>
+          <div class="stat-mini-val c-accent">0.12mm</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top-right: Progress -->
+    <div class="hud-panel hud-tr">
+      <div class="hud-panel-title">Progrés d'impressió</div>
+      <div class="ring-row">
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="32" fill="none" stroke="#1c2333" stroke-width="5"/>
+          <circle id="ringCircle" cx="40" cy="40" r="32" fill="none" stroke="#00d4ff"
+            stroke-width="5" stroke-linecap="round"
+            stroke-dasharray="201" stroke-dashoffset="201"
+            transform="rotate(-90 40 40)"
+            style="filter:drop-shadow(0 0 5px #00d4ff)"/>
+        </svg>
+        <div>
+          <div class="ring-pct" id="pctLabel">0%</div>
+          <div class="ring-sub" id="layerLabel">0 / 0 capes</div>
+        </div>
+      </div>
+      <div class="pbar">
+        <div class="pbar-fill" id="pbarFill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <!-- Bottom-left: Temp + Layers -->
+    <div class="hud-panel hud-bl">
+      <div class="hud-panel-title">Temperatura broqueta</div>
+      <svg class="temp-svg" viewBox="0 0 220 68" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#00d4ff" stop-opacity=".35"/>
+            <stop offset="100%" stop-color="#00d4ff" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path id="tArea" d="" fill="url(#tg)"/>
+        <path id="tLine" d="" fill="none" stroke="#00d4ff" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="0" y1="34" x2="220" y2="34" stroke="#ffffff10" stroke-width="1" stroke-dasharray="4,5"/>
+        <text x="216" y="30" text-anchor="end" fill="#ffffff30" font-size="9" font-weight="700">220°C</text>
+      </svg>
+      <div class="hud-panel-title" style="margin-top:2px">Capes actives</div>
+      <div class="layer-list" id="layerList"></div>
+    </div>
+
+    <!-- Bottom-right: Materials + Specs -->
+    <div class="hud-panel hud-br">
+      <div class="hud-panel-title">Material restant</div>
+      <div class="mat-list">
+        <div class="mat-row">
+          <div class="mat-hdr"><span>PLA+ Blanc</span><span>73%</span></div>
+          <div class="mat-bg"><div class="mat-fill" style="width:73%;background:#1e9be0"></div></div>
+        </div>
+        <div class="mat-row">
+          <div class="mat-hdr"><span>Suport HIPS</span><span>41%</span></div>
+          <div class="mat-bg"><div class="mat-fill" style="width:41%;background:#a020f0"></div></div>
+        </div>
+        <div class="mat-row">
+          <div class="mat-hdr"><span>Recobriment</span><span>58%</span></div>
+          <div class="mat-bg"><div class="mat-fill" style="width:58%;background:#57ff2a"></div></div>
+        </div>
+      </div>
+      <div class="hud-panel-title" style="margin-top:4px">Especificacions</div>
+      <div class="spec-list">
+        <div class="spec-row"><span class="spec-key">Arxiu</span><span class="spec-val" id="specFile">frame.stl</span></div>
+        <div class="spec-row"><span class="spec-key">Dimensions</span><span class="spec-val" id="specDims">—</span></div>
+        <div class="spec-row"><span class="spec-key">Triangles</span><span class="spec-val" id="specTris">—</span></div>
+        <div class="spec-row"><span class="spec-key">Farciment</span><span class="spec-val">20% cúbic</span></div>
+      </div>
+    </div>
+
+    <!-- Centre coords -->
+    <div class="hud-centre">
+      <span class="hud-ax hud-ax-x">X</span>
+      <span class="hud-ax hud-ax-y">Y</span>
+      <span class="hud-ax hud-ax-z">Z</span>
+      <span class="hud-coord" id="hudCoords">ROT Y: 0°  ·  CAPA: 0  ·  Z: 0.00</span>
+      <span class="hud-fps" id="hudFps">—</span>
+    </div>
+  </div>
+
+  <footer>
+    <div class="footer-prog">
+      <div class="footer-prog-pct" id="footerPct">0%</div>
+      <div class="footer-prog-bar-wrap">
+        <div class="footer-prog-bar" id="footerBar" style="width:0%"></div>
+      </div>
+      <div class="footer-prog-meta">
+        <span id="footerElapsed">0h 00m</span>
+        <span id="footerRemaining">Restant: —</span>
+      </div>
+    </div>
+    <div class="timeline">
+      <div class="tl-step done"><div class="tl-dot"></div><div class="tl-label">Preparació</div></div>
+      <div class="tl-step done"><div class="tl-dot"></div><div class="tl-label">Escalfament</div></div>
+      <div class="tl-step active"><div class="tl-dot"></div><div class="tl-label">Impressió</div></div>
+      <div class="tl-step"><div class="tl-dot"></div><div class="tl-label">Refredament</div></div>
+      <div class="tl-step"><div class="tl-dot"></div><div class="tl-label">Finalitzat</div></div>
+    </div>
+  </footer>
+
+</div>
+<script>
+// ── Three.js ──────────────────────────────────────────
+const canvas   = document.getElementById('threeCanvas');
+const viewport = document.getElementById('viewport');
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x030507, 1);
+renderer.shadowMap.enabled = true;
+renderer.localClippingEnabled = true;
+
+const scene = new THREE.Scene();
+scene.fog   = new THREE.FogExp2(0x030507, 0.018);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 300);
+camera.position.set(6.5, 3.5, 7.5);
+camera.lookAt(0, 1.0, 0);
+
+// Lights
+scene.add(new THREE.AmbientLight(0xaabbcc, 2.0));
+const keyLight = new THREE.DirectionalLight(0xffffff, 5);
+keyLight.position.set(5, 10, 5); keyLight.castShadow = true; scene.add(keyLight);
+scene.add(Object.assign(new THREE.DirectionalLight(0xa020f0, 2.0), { position: new THREE.Vector3(-5,3,-5) }));
+scene.add(Object.assign(new THREE.DirectionalLight(0x00d4ff, 3.0), { position: new THREE.Vector3(0,-3,-6) }));
+const pointLight = new THREE.PointLight(0x00d4ff, 3, 22);
+pointLight.position.set(0, 4, 0); scene.add(pointLight);
+
+// Bed — wider, bluer grid to match reference
+const bed = new THREE.Mesh(
+  new THREE.BoxGeometry(10, 0.04, 10),
+  new THREE.MeshPhongMaterial({ color: 0x07101e, shininess: 20, transparent: true, opacity: 0.5 })
+);
+bed.position.y = -0.02; bed.receiveShadow = true; scene.add(bed);
+const grid = new THREE.GridHelper(10, 50, 0x1a4a70, 0x0d2235);
+grid.position.y = 0.02; scene.add(grid);
+
+// Model group
+const modelGroup = new THREE.Group(); scene.add(modelGroup);
+modelGroup.rotation.order = 'YXZ';
+
+// Sweep plane
+const sweepPlane = new THREE.Mesh(
+  new THREE.PlaneGeometry(10, 10),
+  new THREE.MeshBasicMaterial({ color: 0x00d4ff, transparent: true, opacity: 0.06, side: THREE.DoubleSide })
+);
+sweepPlane.rotation.x = Math.PI / 2; sweepPlane.visible = false; scene.add(sweepPlane);
+
+// Particles
+const pGeo = new THREE.BufferGeometry();
+const pPos = new Float32Array(250 * 3);
+for (let i = 0; i < 250; i++) {
+  pPos[i*3] = (Math.random()-.5)*9; pPos[i*3+1] = 0; pPos[i*3+2] = (Math.random()-.5)*9;
+}
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+const pMat   = new THREE.PointsMaterial({ color: 0x00d4ff, size: 0.035, transparent: true, opacity: .6 });
+const pCloud = new THREE.Points(pGeo, pMat); pCloud.visible = false; scene.add(pCloud);
+
+// ── Solid cyan/teal material (like reference) ──
+const solidMat = new THREE.MeshPhongMaterial({
+  color:     0x00bcd0,
+  emissive:  0x002f3c,
+  shininess: 140,
+  specular:  0x88eeff,
+});
+const wireMat = new THREE.MeshBasicMaterial({
+  color: 0x00d4ff, wireframe: true, transparent: true, opacity: 0.07 });
+
+const printClipLow  = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+const printClipHigh = new THREE.Plane(new THREE.Vector3(0,  1, 0), 0);
+solidMat.clippingPlanes = [printClipLow];
+wireMat.clippingPlanes  = [printClipHigh];
+
+// Hot filament edge
+const edgeMat  = new THREE.MeshBasicMaterial({
+  color: 0xff7700, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
+const edgeMesh = new THREE.Mesh(new THREE.PlaneGeometry(9, 0.022), edgeMat);
+edgeMesh.rotation.x = Math.PI / 2; edgeMesh.visible = false; scene.add(edgeMesh);
+const printLight = new THREE.PointLight(0xff5500, 0, 8); scene.add(printLight);
+
+// State
+let modelLoaded = false, modelMinY = 0, modelMaxY = 2;
+let printPct = 0, totalLayers = 200, startTime = null, isPaused = false;
+let autoRotAngle = 0, userRotX = 0, userRotY = 0;
+let isDragging = false, lastMX = 0, lastMY = 0;
+
+// Resize
+function onResize() {
+  const w = viewport.clientWidth, h = viewport.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+onResize();
+new ResizeObserver(onResize).observe(viewport);
+
+// Animate
+let t = 0, fCount = 0, fLast = performance.now();
+function animate() {
+  requestAnimationFrame(animate);
+  t += 0.008; fCount++;
+  const now = performance.now();
+  if (now - fLast > 1000) {
+    document.getElementById('hudFps').textContent = fCount + ' FPS';
+    fCount = 0; fLast = now;
+  }
+
+  if (modelGroup.children.length) {
+    if (!isDragging) autoRotAngle += 0.0025; // slower, more cinematic
+    modelGroup.rotation.x = userRotX;
+    modelGroup.rotation.y = userRotY + autoRotAngle;
+    modelGroup.position.y = Math.sin(userRotY + autoRotAngle) * 0.025;
+  }
+
+  if (modelLoaded && !isPaused) {
+    const sweepY = modelMinY + ((Math.sin(t * 0.25) + 1) / 2) * (modelMaxY - modelMinY);
+    sweepPlane.position.y = sweepY; pCloud.position.y = sweepY;
+    sweepPlane.material.opacity = 0.05 + Math.sin(t * 4) * 0.02;
+    pMat.opacity = 0.4 + Math.sin(t * 3) * 0.25;
+
+    printClipLow.constant  = sweepY;
+    printClipHigh.constant = -sweepY;
+
+    edgeMesh.position.y = sweepY; edgeMesh.visible = true;
+    const fl = 0.55 + Math.sin(t*16)*0.35 + Math.sin(t*7)*0.1;
+    edgeMat.opacity = Math.max(0.1, fl);
+    edgeMat.color.setRGB(1, 0.22 + Math.sin(t*5)*0.18, 0);
+    printLight.position.set(0, sweepY, 0.8);
+    printLight.intensity = 8 + Math.sin(t*9)*4;
+
+    const vp3 = new THREE.Vector3(0, sweepY, 0).project(camera);
+    document.getElementById('sweepHud').style.top = (((1 - vp3.y) / 2) * viewport.clientHeight) + 'px';
+
+    const rx = ((modelGroup.rotation.y / (Math.PI*2)) * 360 % 360).toFixed(1);
+    const cl = Math.round(((sweepY-modelMinY)/(modelMaxY-modelMinY))*totalLayers);
+    document.getElementById('hudCoords').textContent = `ROT Y: ${rx}°  ·  CAPA: ${cl}  ·  Z: ${sweepY.toFixed(2)}`;
+  }
+
+  pointLight.intensity = 3 + Math.sin(t*2.5)*0.8;
+  renderer.render(scene, camera);
+}
+animate();
+
+// ── STL Parser ────────────────────────────────────────
+function parseSTL(buf) {
+  const dv = new DataView(buf);
+  const n  = dv.getUint32(80, true);
+  if (buf.byteLength === 84 + n*50 && n > 0) {
+    const v = new Float32Array(n*9); let off = 84;
+    for (let i = 0; i < n; i++) {
+      off += 12;
+      for (let k = 0; k < 3; k++) {
+        v[i*9+k*3]   = dv.getFloat32(off,   true);
+        v[i*9+k*3+1] = dv.getFloat32(off+4, true);
+        v[i*9+k*3+2] = dv.getFloat32(off+8, true);
+        off += 12;
+      }
+      off += 2;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(v, 3));
+    g.computeVertexNormals(); return g;
+  }
+  const text = new TextDecoder().decode(buf), verts = [];
+  const re = /vertex\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)\s+([\d.eE+\-]+)/g; let m;
+  while ((m = re.exec(text)) !== null) verts.push(+m[1], +m[2], +m[3]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(verts), 3));
+  g.computeVertexNormals(); return g;
+}
+
+// ── Load geometry ─────────────────────────────────────
+const MODEL_SCALE = 4.2; // 40% bigger than default 3.0
+
+function loadGeometry(geo, filename) {
+  geo.computeBoundingBox();
+  const box = geo.boundingBox;
+  const cen = new THREE.Vector3(); box.getCenter(cen);
+  geo.translate(-cen.x, -cen.y, -cen.z);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const sc   = MODEL_SCALE / Math.max(size.x, size.y, size.z);
+  geo.scale(sc, sc, sc);
+  geo.computeBoundingBox();
+  geo.translate(0, -geo.boundingBox.min.y, 0);
+  geo.computeBoundingBox();
+
+  const fb = geo.boundingBox;
+  while (modelGroup.children.length) {
+    modelGroup.children[0].geometry?.dispose();
+    modelGroup.remove(modelGroup.children[0]);
+  }
+  const mesh = new THREE.Mesh(geo, solidMat); mesh.castShadow = true; modelGroup.add(mesh);
+  modelGroup.add(new THREE.Mesh(geo, wireMat));
+
+  const mh = fb.max.y - fb.min.y;
+  modelMinY = fb.min.y; modelMaxY = fb.max.y;
+  sweepPlane.visible = true; pCloud.visible = true;
+  document.getElementById('sweepHud').style.display = '';
+
+  // Camera positioned for the bigger model
+  camera.position.set(MODEL_SCALE*1.5, mh*0.5 + MODEL_SCALE*0.85, MODEL_SCALE*1.8);
+  camera.lookAt(0, mh*0.5, 0);
+
+  totalLayers = Math.max(50, Math.round(mh/0.012));
+  printPct = 0; startTime = Date.now(); modelLoaded = true;
+
+  const sx = (size.x*sc*10).toFixed(1), sy = (size.y*sc*10).toFixed(1), sz = (size.z*sc*10).toFixed(1);
+  document.getElementById('specFile').textContent = filename;
+  document.getElementById('specDims').textContent = `${sx}×${sy}×${sz}mm`;
+  document.getElementById('specTris').textContent = (geo.attributes.position.count/3).toLocaleString();
+  document.getElementById('filenameLabel').textContent = filename;
+  userRotX = 0; userRotY = 0; autoRotAngle = 0;
+  buildLayers(); updateProgress(0);
+}
+
+// ── UI helpers ────────────────────────────────────────
+function buildLayers() {
+  const list   = document.getElementById('layerList'); list.innerHTML = '';
+  const active = Math.round((printPct/100)*totalLayers);
+  const start  = Math.max(1, active-1), end = Math.min(totalLayers, active+3);
+  for (let i = start; i <= end; i++) {
+    const row = document.createElement('div');
+    row.className = 'layer-row' + (i===active?' active':'');
+    row.innerHTML = `<div style="display:flex;align-items:center;gap:5px"><div class="layer-dot"></div><span>Capa ${i}</span></div><span>${i<active?'✓':i===active?'▶':'·'}</span>`;
+    list.appendChild(row);
+  }
+}
+function updateProgress(pct) {
+  printPct = pct;
+  const layer = Math.round((pct/100)*totalLayers);
+  document.getElementById('pctLabel').textContent   = Math.round(pct)+'%';
+  document.getElementById('layerLabel').textContent = `${layer} / ${totalLayers} capes`;
+  document.getElementById('pbarFill').style.width   = pct+'%';
+  document.getElementById('ringCircle').setAttribute('stroke-dashoffset', (201-(pct/100)*201).toFixed(1));
+  if (startTime) {
+    const el  = Math.floor((Date.now()-startTime)/1000);
+    const em  = Math.floor(el/60), es = el%60;
+    const tot = pct>0 ? (el/pct)*100 : 0;
+    const rem = Math.max(0,Math.floor(tot-el));
+    const rh  = Math.floor(rem/3600), rm = Math.floor((rem%3600)/60);
+    document.getElementById('footerPct').textContent       = Math.round(pct)+'%';
+    document.getElementById('footerBar').style.width       = pct+'%';
+    document.getElementById('footerElapsed').textContent   = `${em}h ${String(es).padStart(2,'0')}m`;
+    document.getElementById('footerRemaining').textContent = pct>0 ? `Restant: ${rh>0?rh+'h ':''}${rm}m` : 'Restant: —';
+  }
+  buildLayers();
+}
+setInterval(()=>{ if (!modelLoaded||printPct>=100||isPaused) return; updateProgress(Math.min(100,printPct+0.05)); }, 500);
+
+// Temp sparkline
+const tempData = Array.from({length:40},()=>220+(Math.random()-.5)*6);
+function drawTemp() {
+  const w=220,h=68,min=205,max=235;
+  const pts = tempData.slice(-40).map((v,i)=>`${((i/39)*w).toFixed(1)},${(h-((v-min)/(max-min))*h).toFixed(1)}`);
+  document.getElementById('tLine').setAttribute('d',`M ${pts.join(' L ')}`);
+  document.getElementById('tArea').setAttribute('d',`M 0,${h} L ${pts.join(' L ')} L ${w},${h} Z`);
+}
+drawTemp();
+setInterval(()=>{ const l=tempData[tempData.length-1]; tempData.push(Math.max(215,Math.min(225,l+(Math.random()-.5)*2))); if(tempData.length>80)tempData.shift(); drawTemp(); },400);
+
+const ck=()=>{ document.getElementById('clock').textContent=new Date().toLocaleTimeString('ca-ES',{hour12:false}); };
+ck(); setInterval(ck,1000);
+
+// ── Code panel — stationary slicer code ──────────────
+(function() {
+  const LINES = [
+    ['dim','# ── frame.stl pipeline ─────────'],
+    ['p',  'from dataclasses import dataclass'],
+    ['p',  'import struct, threading, time'  ],
+    ['',   ''                                ],
+    ['c',  '@dataclass'                      ],
+    ['c',  'class PrintJob:'                 ],
+    ['g',  '  filename:     str'             ],
+    ['g',  '  layer_height: float = 0.12'    ],
+    ['g',  '  infill_pct:   int   = 20'      ],
+    ['g',  '  total_layers: int   = 0'       ],
+    ['g',  '  support:      bool  = False'   ],
+    ['',   ''                                ],
+    ['c',  'def slice_geometry(path: str):'  ],
+    ['g',  '  geo   = load_stl(path)'        ],
+    ['g',  '  bb    = geo.bounding_box()'    ],
+    ['w',  '  n     = int(bb.max_z / 0.12)' ],
+    ['g',  '  return generate_gcode(geo, n)' ],
+    ['',   ''                                ],
+    ['p',  'def generate_gcode(geo, n):'     ],
+    ['g',  '  g  = ["G28 ; home all"]'       ],
+    ['g',  '  g += ["G1 Z0.3 F5000"]'        ],
+    ['g',  '  g += ["M104 S220"]'            ],
+    ['g',  '  g += ["M140 S60"]'             ],
+    ['c',  '  for i in range(n):'            ],
+    ['g',  '    g += slice_layer(geo, i)'    ],
+    ['g',  '  return g'                      ],
+    ['',   ''                                ],
+    ['p',  'job   = PrintJob("frame.stl")'   ],
+    ['c',  'gcode = slice_geometry('         ],
+    ['g',  '          job.filename)'         ],
+    ['dim','# ── slicing complete ───────────'],
+    ['p',  '<span class="code-cursor">▌</span>'],
+  ];
+  const el = document.getElementById('codePanel');
+  el.innerHTML = LINES.map(([cls,txt])=>`<span class="${cls||'g'}">${txt||'&nbsp;'}</span>`).join('');
+})();
+
+// ── Mouse / touch interaction ─────────────────────────
+canvas.addEventListener('mousedown', e=>{ isDragging=true; lastMX=e.clientX; lastMY=e.clientY; canvas.classList.add('grabbing'); });
+window.addEventListener('mousemove', e=>{
+  if(!isDragging) return;
+  userRotY += (e.clientX-lastMX)*0.006; userRotX += (e.clientY-lastMY)*0.004;
+  userRotX = Math.max(-1.2,Math.min(1.2,userRotX));
+  lastMX=e.clientX; lastMY=e.clientY;
+});
+window.addEventListener('mouseup',()=>{ isDragging=false; canvas.classList.remove('grabbing'); });
+
+// Zoom
+let camZoom = 1.0;
+function applyZoom(){ camera.zoom=camZoom; camera.updateProjectionMatrix(); }
+canvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  camZoom = Math.min(5, Math.max(0.2, camZoom*(e.deltaY<0?1.08:1/1.08)));
+  applyZoom();
+},{ passive:false });
+document.addEventListener('keydown', e=>{
+  if (e.key==='+'||e.key==='='){ camZoom=Math.min(5,camZoom*1.1); applyZoom(); }
+  if (e.key==='-'||e.key==='_'){ camZoom=Math.max(0.2,camZoom/1.1); applyZoom(); }
+  if (e.key==='0'){ camZoom=1; applyZoom(); }
+});
+
+// ── Auto-preload frame.stl ────────────────────────────
+fetch('STL/main/frame.stl')
+  .then(r=>{ if(!r.ok) throw new Error(); return r.arrayBuffer(); })
+  .then(buf=>loadGeometry(parseSTL(buf),'frame.stl'))
+  .catch(()=>{
+    // Fallback: flat box similar to frame shape
+    const geo = new THREE.BoxGeometry(4.2, 0.8, 2.5);
+    loadGeometry(geo,'frame.stl');
+  });
+</script>
+</body>
+</html>

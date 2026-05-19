@@ -692,6 +692,19 @@ let autoRotAngle = 0;
 let userRotX = 0, userRotY = 0;
 let isDragging = false, lastMX = 0, lastMY = 0;
 
+// Orbit camera
+let camTheta = 0.8, camPhi = 0.9, camDist = 7.5;
+const camTarget = new THREE.Vector3(0, 1.5, 0);
+
+function updateCameraOrbit() {
+  camera.position.set(
+    camTarget.x + camDist * Math.sin(camPhi) * Math.sin(camTheta),
+    camTarget.y + camDist * Math.cos(camPhi),
+    camTarget.z + camDist * Math.sin(camPhi) * Math.cos(camTheta)
+  );
+  camera.lookAt(camTarget);
+}
+
 // Resize
 function onResize() {
   const w = viewport.clientWidth, h = viewport.clientHeight;
@@ -715,10 +728,8 @@ function animate() {
   }
 
   if (modelGroup.children.length) {
-    if (!isDragging && !isPaused) autoRotAngle += 0.0048;
-    modelGroup.rotation.x = userRotX;
-    modelGroup.rotation.y = userRotY + autoRotAngle;
-    modelGroup.position.y = Math.sin(userRotY + autoRotAngle) * 0.03;
+    if (!isDragging && !isPaused) camTheta += 0.0032;
+    updateCameraOrbit();
   }
 
   if (modelLoaded && !isPaused) {
@@ -751,10 +762,10 @@ function animate() {
     hud.style.top = sy + 'px';
 
     // Coords
-    const rx = ((modelGroup.rotation.y / (Math.PI*2)) * 360 % 360).toFixed(1);
-    const cl = Math.round(((sweepY - modelMinY) / (modelMaxY - modelMinY)) * totalLayers);
+    const deg = (((camTheta / (Math.PI*2)) * 360) % 360 + 360) % 360;
+    const cl  = Math.round(((sweepY - modelMinY) / (modelMaxY - modelMinY)) * totalLayers);
     document.getElementById('hudCoords').textContent =
-      `ROT Y: ${rx}°  ·  CAPA: ${cl}  ·  Z: ${sweepY.toFixed(2)}`;
+      `CAM θ: ${deg.toFixed(1)}°  ·  CAPA: ${cl}  ·  Z: ${sweepY.toFixed(2)}`;
   }
 
   pointLight.intensity = 2 + Math.sin(t * 2.5) * 0.8;
@@ -846,8 +857,10 @@ function loadGeometry(geo, filename) {
   // Use max scaled dimension (always ~3.0) so camera distance is correct
   // even when the model is flat (small mh) or oriented with Y as minor axis
   // Diagonal cinematic angle — works for flat and tall models alike
-  camera.position.set(5.0, mh * 0.5 + 2.2, 4.5);
-  camera.lookAt(0, mh * 0.5, 0);
+  camTarget.set(0, mh * 0.5, 0);
+  camDist = Math.max(size.x, size.y, size.z) * scale * 2.8;
+  camTheta = 0.8; camPhi = 0.9;
+  updateCameraOrbit();
 
   totalLayers = Math.max(50, Math.round(mh / 0.012));
   printPct = 0; startTime = Date.now(); modelLoaded = true;
@@ -1286,8 +1299,8 @@ canvas.addEventListener('mousedown', e => {
 });
 window.addEventListener('mousemove', e => {
   if (!isDragging) return;
-  userRotY += (e.clientX - lastMX) * 0.01;
-  userRotX += (e.clientY - lastMY) * 0.01;
+  camTheta -= (e.clientX - lastMX) * 0.007;
+  camPhi = Math.max(0.08, Math.min(Math.PI - 0.08, camPhi - (e.clientY - lastMY) * 0.005));
   lastMX = e.clientX; lastMY = e.clientY;
 });
 window.addEventListener('mouseup', () => {
@@ -1298,20 +1311,18 @@ canvas.addEventListener('touchstart', e => {
 }, {passive: true});
 window.addEventListener('touchmove', e => {
   if (!isDragging) return;
-  userRotY += (e.touches[0].clientX - lastMX) * 0.01;
-  userRotX += (e.touches[0].clientY - lastMY) * 0.01;
+  camTheta -= (e.touches[0].clientX - lastMX) * 0.007;
+  camPhi = Math.max(0.08, Math.min(Math.PI - 0.08, camPhi - (e.touches[0].clientY - lastMY) * 0.005));
   lastMX = e.touches[0].clientX; lastMY = e.touches[0].clientY;
 }, {passive: true});
 window.addEventListener('touchend', () => { isDragging = false; });
 
 // ── Rotation buttons ──────────────────────────────────
 document.getElementById('rotXBtn').addEventListener('click', () => {
-  userRotX += Math.PI / 2;
+  camPhi = Math.max(0.08, camPhi - Math.PI / 4);
 });
 document.getElementById('flatBtn').addEventListener('click', () => {
-  userRotX = -Math.PI / 2;
-  userRotY = 0;
-  autoRotAngle = 0;
+  camTheta = 0.8; camPhi = 0.9;
 });
 
 // ── Pause / Resume ────────────────────────────────────

@@ -840,7 +840,7 @@ const layerMat = new THREE.ShaderMaterial({
 let models = [];       // { group, name, tris, dimX, dimY, dimZ, minY, maxY, solidMat }
 let selIdx  = -1;      // selected model index
 let modelMinY = 0, modelMaxY = 2, totalLayers = 200;
-let camTheta = 0.8, camPhi = 0.75, camDist = 5; // spherical orbit coords
+let camTheta = 0.8, camPhi = 0.55, camDist = 5; // spherical orbit coords
 let isDragging = false, lastMX = 0, lastMY = 0;
 let userInteracted = false;
 let viewMode = 'solid', appMode = 'prepare';
@@ -1141,7 +1141,7 @@ function loadGeo(geo, name) {
   const spanX = Math.max(...allX) - Math.min(...allX) + (models[0]?.geoW ?? 2);
   const spanZ = Math.max(...allZ) - Math.min(...allZ) + (models[0]?.geoD ?? 2);
   const dist  = Math.max(spanX * 1.5, spanZ * 1.5, mh * 2.2, 4);
-  setCam(midX, mh * 1.3, dist, midX, mh / 2, midZ);
+  setCam(midX, mh * 2.4, dist, midX, mh / 2, midZ);
 
   // Stats — combined across all models
   const totalTris = models.reduce((s, m) => s + m.tris, 0);

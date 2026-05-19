@@ -816,8 +816,10 @@ function loadGeometry(geo, filename) {
   document.getElementById('sweepHud').style.display = '';
 
   const mh = fb.max.y - fb.min.y;
-  camera.position.set(mh*1.29, mh*1.0, mh*1.57);
-  camera.lookAt(0, mh/2, 0);
+  // Use max scaled dimension (always ~3.0) so camera distance is correct
+  // even when the model is flat (small mh) or oriented with Y as minor axis
+  camera.position.set(6.5, mh * 0.5 + 3.5, 8.0);
+  camera.lookAt(0, mh * 0.5, 0);
 
   totalLayers = Math.max(50, Math.round(mh / 0.012));
   printPct = 0; startTime = Date.now(); modelLoaded = true;
@@ -1169,7 +1171,9 @@ function refreshSideViews(geo, mh) {
   while (sideModelGroup.children.length) sideModelGroup.remove(sideModelGroup.children[0]);
   sideModelGroup.add(new THREE.Mesh(geo, _sSolidMat));
 
-  const D = mh * 3.5;
+  // Fixed distance based on max scaled dim (always ~3.0) so all model
+  // orientations fit in the side view panels without clipping
+  const D = 8.0;
   const cy = mh / 2;
   const [camL, camR, camT, camB] = sideViewRenderers.map(v => v.camera);
 

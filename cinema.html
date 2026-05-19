@@ -377,8 +377,10 @@ camera.lookAt(0, 1.0, 0);
 scene.add(new THREE.AmbientLight(0xaabbcc, 2.0));
 const keyLight = new THREE.DirectionalLight(0xffffff, 5);
 keyLight.position.set(5, 10, 5); keyLight.castShadow = true; scene.add(keyLight);
-scene.add(Object.assign(new THREE.DirectionalLight(0xa020f0, 2.0), { position: new THREE.Vector3(-5,3,-5) }));
-scene.add(Object.assign(new THREE.DirectionalLight(0x00d4ff, 3.0), { position: new THREE.Vector3(0,-3,-6) }));
+const fillLight = new THREE.DirectionalLight(0xa020f0, 2.0);
+fillLight.position.set(-5, 3, -5); scene.add(fillLight);
+const rimLight = new THREE.DirectionalLight(0x00d4ff, 3.0);
+rimLight.position.set(0, -3, -6); scene.add(rimLight);
 const pointLight = new THREE.PointLight(0x00d4ff, 3, 22);
 pointLight.position.set(0, 4, 0); scene.add(pointLight);
 

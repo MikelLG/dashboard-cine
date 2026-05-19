@@ -404,7 +404,7 @@
       <span class="hud-ax hud-ax-y">Y</span>
       <span class="hud-ax hud-ax-z">Z</span>
       <span class="hud-coord" id="hudCoords">ROT Y: 0°  ·  CAPES: 0  ·  Z: 0.00</span>
-      <span id="rotMode" style="font-size:9px;padding:2px 7px;border-radius:3px;font-weight:800;letter-spacing:.08em;background:#00d4ff22;color:#00d4ff;border:1px solid #00d4ff44">MODEL</span>
+      <span id="rotMode" style="font-size:9px;padding:2px 7px;border-radius:3px;font-weight:800;letter-spacing:.08em;background:#a020f022;color:#c060ff;border:1px solid #a020f044">ORBIT</span>
       <span class="hud-fps" id="hudFps">—</span>
     </div>
   </div>
@@ -515,7 +515,7 @@ let autoRotAngle = 0, userRotX = 0, userRotY = 0;
 let isDragging = false, lastMX = 0, lastMY = 0;
 
 // ── Orbit mode ──
-let orbitMode = false;
+let orbitMode = true;
 let camTheta = 0.55, camPhi = 1.1;
 let camDist = parseFloat(localStorage.getItem('cinemaDist') || '7.5');
 const camTarget = new THREE.Vector3(0, 1.5, 0);
